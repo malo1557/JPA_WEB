@@ -2,21 +2,21 @@ name: Java CI with Maven and SemVer Release
 
 on:
   push:
-    branches: [ "master" ]
+    branches: [ "master", "main" ] # main 브랜치 호환 추가
   pull_request:
-    branches: [ "master" ]
+    branches: [ "master", "main" ]
 
 jobs:
   build-and-release:
     runs-on: ubuntu-latest
     permissions:
-      contents: write # 릴리즈 및 태그 생성을 위해 쓰기 권한 필수
+      contents: write
       pull-requests: read
 
     steps:
     - uses: actions/checkout@v4
       with:
-        fetch-depth: 0 # 전체 히스토리를 가져와야 버전 계산 가능
+        fetch-depth: 0
 
     - name: Set up JDK 21
       uses: actions/setup-java@v4
@@ -25,33 +25,25 @@ jobs:
         distribution: 'temurin'
         cache: maven
 
-    # 1. 커밋 메시지를 기반으로 다음 버전 계산 및 태그 생성
     - name: Bump version and push tag
       id: tag_version
-      if: github.event_name == 'push' # PR이 아닌 master 푸시일 때만 실행
+      if: github.event_name == 'push'
       uses: mathieudutour/github-tag-action@v6.2
       with:
         github_token: ${{ secrets.GITHUB_TOKEN }}
-        default_bump: patch # 커밋 메시지에서 타입을 못 찾으면 기본적으로 patch 증가
-        release_branches: master
+        default_bump: patch
+        release_branches: master,main # main 브랜치 호환 추가
 
-    # 2. Maven pom.xml 버전 업데이트 (계산된 태그 버전 적용)
     - name: Update Maven Version
       if: github.event_name == 'push' && steps.tag_version.outputs.new_version
       run: |
         mvn versions:set -DnewVersion=${{ steps.tag_version.outputs.new_version }} -DgenerateBackupPoms=false
 
-    # 3. Maven 빌드 (업데이트된 버전으로 패키징)
     - name: Build with Maven
       run: mvn -B package --file pom.xml
 
-    # 4. GitHub Release 생성 및 아티팩트 업로드
     - name: Create a GitHub release
       uses: ncipollo/release-action@v1
       if: github.event_name == 'push' && steps.tag_version.outputs.new_version
       with:
-        tag: ${{ steps.tag_version.outputs.new_tag }}
-        name: Release ${{ steps.tag_version.outputs.new_tag }}
-        body: ${{ steps.tag_version.outputs.changelog }}
-        artifacts: "target/*.jar" # 빌드된 jar 파일을 릴리즈에 첨부
-        token: ${{ secrets.GITHUB_TOKEN }}
+        tag
